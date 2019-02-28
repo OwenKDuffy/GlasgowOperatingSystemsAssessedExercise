@@ -206,21 +206,52 @@ int run_driver(CLObject* ocl,unsigned int buffer_size,  int* input_buffer_1, int
 
     // Create the buffer objects to link the input and output arrays in device memory to the buffers in host memory
 
-    input1 = clCreateBuffer(ocl->context, CL_MEM_READ_ONLY , buffer_size , NULL, NULL);
-    input2 = clCreateBuffer(ocl->context, CL_MEM_READ_ONLY , buffer_size , NULL, NULL);
-    output = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY , buffer_size , NULL, NULL);
-    status_buf = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY , buffer_size , NULL, NULL);
+    input1 = clCreateBuffer(ocl->context, CL_MEM_READ_ONLY , buffer_size , input_buffer_1, err);
+    // if input1 !NULL && err == NULL good otherwise fix
+    if (input1 == NULL || err != NULL)
+    {
+      fprintf(stderr,"Error: %d\nFailed to create buffer on device\n", err);
+      exit(EXIT_FAILURE);
+    }
+    input2 = clCreateBuffer(ocl->context, CL_MEM_READ_ONLY , buffer_size , input_buffer_2, err);
+    if (input2 == NULL || err != NULL)
+    {
+      fprintf(stderr,"Error: %d\nFailed to create buffer on device\n", err);
+      exit(EXIT_FAILURE);
+    }
+    output = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY , buffer_size , output_buffer, NULL);
+    if (output == NULL || err != NULL)
+    {
+      fprintf(stderr,"Error: %d\nFailed to create buffer on device\n", err);
+      exit(EXIT_FAILURE);
+    }
+    // status_buf = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY , buffer_size , NULL, NULL);
+    // if (status == NULL || err != NULL)
+    // {
+    //   fprintf(stderr,"Error: %d\nFailed to create buffer on device\n", err);
+    //   exit(EXIT_FAILURE);
+    // }
 
     // Write the data in input arrays into the device memory
 
-    err = clEnqueueWriteBuffer(ocl->command_queue, input1, CL_TRUE, 0, buffer_size, int* ocl->input_buffer_1,0, NULL, NULL);
+
+    // cl_int clEnqueueWriteBuffer (	cl_command_queue command_queue,
+    //  	cl_mem buffer,
+    //  	cl_bool blocking_write,
+    //  	size_t offset,
+    //  	size_t cb,
+    //  	const void *ptr,
+    //  	cl_uint num_events_in_wait_list,
+    //  	const cl_event *event_wait_list,
+    //  	cl_event *event)
+    err = clEnqueueWriteBuffer(ocl->command_queue, input1, CL_TRUE, 0, buffer_size, (void*) input_buffer_1, NULL, 0, NULL);
     if (err != CL_SUCCESS){
-        fprintf(stderr, "Something wrong with datatransfer to device; input1", err);
+        fprintf(stderr, "Something wrong with datatransfer to device; input1\nError Code: %d", err);
         exit(EXIT_FAILURE);
     }
-    err = clEnqueueWriteBuffer(ocl->command_queue, input2, CL_TRUE, 0, buffer_size, int* ocl->input_buffer_1, 0, NULL, NULL);
+    err = clEnqueueWriteBuffer(ocl->command_queue, input2, CL_TRUE, 0, buffer_size, (void*) input_buffer_2, NULL, 0, NULL);
     if (err != CL_SUCCESS){
-        fprintf(stderr, "Something worng with datatransfer to device; input2",err);
+        fprintf(stderr, "Something worng with datatransfer to device; input2\nError Code: %d",err);
         exit(EXIT_FAILURE);
     }
 
@@ -254,6 +285,15 @@ int run_driver(CLObject* ocl,unsigned int buffer_size,  int* input_buffer_1, int
 
     // Execute the kernel, i.e. tell the device to process the data using the given global and local ranges
 
+    // cl_int clEnqueueNDRangeKernel (	cl_command_queue command_queue,
+    //  	cl_kernel kernel,
+    //  	cl_uint work_dim,
+    //  	const size_t *global_work_offset,
+    //  	const size_t *global_work_size,
+    //  	const size_t *local_work_size,
+    //  	cl_uint num_events_in_wait_list,
+    //  	const cl_event *event_wait_list,
+    //  	cl_event *event)
     err = clEnqueueNDRangeKernel(ocl->command_queue, ocl->kernel, 1, NULL, &global, &local, 0, NULL, NULL);
     if (err != CL_SUCCESS){
         fprintf(stderr, "Something wrong", err)
@@ -264,21 +304,38 @@ int run_driver(CLObject* ocl,unsigned int buffer_size,  int* input_buffer_1, int
 
     clFinish(ocl->command_queue);
 
-    // Check the status
+    int tries = 0;
+    if (&status[1] != 0){
+      if (tries < MAX_ITERS){
+        // Check the status
 
-    err = clEnqueueReadBuffer(ocl->command_queue, status_buf, CL_TRUE, 0, sizeof(float), status, 0, NULL, NULL);
-    if (err != CL_SUCCESS){
-        fprintf(stderr, "Something wrong with reading from buffer", err);
+        // cl_int clEnqueueReadBuffer (	cl_command_queue command_queue,
+        //  	cl_mem buffer,
+        //  	cl_bool blocking_read,
+        //  	size_t offset,
+        //  	size_t cb,
+        //  	void *ptr,
+        //  	cl_uint num_events_in_wait_list,
+        //  	const cl_event *event_wait_list,
+        //  	cl_event *event)
+        err = clEnqueueReadBuffer(ocl->command_queue, status_buf, CL_TRUE, 0, sizeof(float), (void *) status, NULL, 0, NULL);
+        if (err != CL_SUCCESS){
+          fprintf(stderr, "Something wrong with reading from buffer", err);
+          exit(EXIT_FAILURE);
+        }
+      }
+      else{
+        fprintf(stderr, "Unable to achieve successful status after %d tries\n", MAX_ITERS);
         exit(EXIT_FAILURE);
+      }
     }
-
     // When the status is 0, read back the results from the device to verify the output
 
-    if (status == 0){ // TODO fix This
-        err = clEnqueueReadBuffer(ocl->command_queue, output, CL_TRUE, 0, sizeof(float) * buffer_size, output_buffer, 0, NULL, NULL);
-        if (err != CL_SUCCESS){
-            fprintf(stderr, "Something wrong with reading from buffer after reading 0 status", err);
-            exit(EXIT_FAILURE);
+
+    err = clEnqueueReadBuffer(ocl->command_queue, output, CL_TRUE, 0, sizeof(float) * buffer_size, output_buffer, NULL, 0, NULL);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with reading from buffer after reading 0 status", err);
+        exit(EXIT_FAILURE);
     }
 
     // Shutdown and cleanup
