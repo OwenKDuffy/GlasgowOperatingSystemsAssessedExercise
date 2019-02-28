@@ -19,7 +19,7 @@ CLObject* init_driver() {
     size_t global;                      // global domain size for our calculation
     size_t local;                       // local domain size for our calculation
 
-    cl_device_id device_id;             // compute device id 
+    cl_device_id device_id;             // compute device id
     cl_context context;                 // compute context
     cl_command_queue command_queue;          // compute command queue
     cl_program program;                 // compute program
@@ -31,7 +31,7 @@ CLObject* init_driver() {
     FILE* programHandle;
     size_t programSize;
     char *programBuffer;
- 
+
     cl_uint nplatforms;
     err = clGetPlatformIDs(0, NULL, &nplatforms);
     if (err != CL_SUCCESS) {
@@ -50,9 +50,9 @@ CLObject* init_driver() {
     }
 #ifdef GPU
     err = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, 1, &device_id, NULL);
-#else    
+#else
     err = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_CPU, 1, &device_id, NULL);
-#endif    
+#endif
     if (err != CL_SUCCESS)
     {
         fprintf(stderr,"Error: Failed to create a device group: %d!\n",err);
@@ -60,7 +60,7 @@ CLObject* init_driver() {
 
     }
 
-    // Create a compute context 
+    // Create a compute context
     //
     context = clCreateContext(0, 1, &device_id, NULL, NULL, &err);
     if (!context)
@@ -130,13 +130,13 @@ CLObject* init_driver() {
     ocl->program= program;
     ocl->device_id = device_id;
 
-//===============================================================================================================================================================  
-// START of assignment code section 
+//===============================================================================================================================================================
+// START of assignment code section
     [YOUR CODE HERE]
 
-// END of assignment code section 
-//===============================================================================================================================================================  
-    
+// END of assignment code section
+//===============================================================================================================================================================
+
     return ocl;
 }
 
@@ -161,12 +161,12 @@ int shutdown_driver(CLObject* ocl) {
             fprintf(stderr,"Error: Failed to release Context: %d!\n",err);
         exit(EXIT_FAILURE);
      }
-//===============================================================================================================================================================  
-// START of assignment code section      
-    [YOUR CODE HERE]    
-// END of assignment code section 
-//===============================================================================================================================================================  
-     
+//===============================================================================================================================================================
+// START of assignment code section
+    [YOUR CODE HERE]
+// END of assignment code section
+//===============================================================================================================================================================
+
     free(ocl);
     return 0;
 }
@@ -175,7 +175,7 @@ int shutdown_driver(CLObject* ocl) {
 
 int run_driver(CLObject* ocl,unsigned int buffer_size,  int* input_buffer_1, int* input_buffer_2, int* output_buffer) {
     long long unsigned int tid = ocl->thread_num;
-#if VERBOSE_MT>2    
+#if VERBOSE_MT>2
      printf("run_driver thread: %llu\n",tid);
 #endif
      int err;                            // error code returned from api calls
@@ -198,46 +198,114 @@ int run_driver(CLObject* ocl,unsigned int buffer_size,  int* input_buffer_1, int
 
      global = buffer_size; // create as meany threads on the device as there are elements in the array
 
-//===============================================================================================================================================================  
-// START of assignment code section 
+//===============================================================================================================================================================
+// START of assignment code section
 
     // You must make sure the driver is thread-safe by using the appropriate POSIX mutex operations
-    // You must also check the return value of every API call and handle any errors 
+    // You must also check the return value of every API call and handle any errors
 
     // Create the buffer objects to link the input and output arrays in device memory to the buffers in host memory
-    
-    [YOUR CODE HERE]
-  
-    // Write the data in input arrays into the device memory 
- 
-    [YOUR CODE HERE]
-  
+
+    input1 = clCreateBuffer(ocl->context, CL_MEM_READ_ONLY , buffer_size , NULL, NULL);
+    input2 = clCreateBuffer(ocl->context, CL_MEM_READ_ONLY , buffer_size , NULL, NULL);
+    output = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY , buffer_size , NULL, NULL);
+    status_buf = clCreateBuffer(ocl->context, CL_MEM_WRITE_ONLY , buffer_size , NULL, NULL);
+
+    // Write the data in input arrays into the device memory
+
+    err = clEnqueueWriteBuffer(ocl->command_queue, input1, CL_TRUE, 0, buffer_size, int* ocl->input_buffer_1,0, NULL, NULL);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with datatransfer to device; input1", err);
+        exit(EXIT_FAILURE);
+    }
+    err = clEnqueueWriteBuffer(ocl->command_queue, input2, CL_TRUE, 0, buffer_size, int* ocl->input_buffer_1, 0, NULL, NULL);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something worng with datatransfer to device; input2",err);
+        exit(EXIT_FAILURE);
+    }
+
     // Set the arguments to our compute kernel
-    
-    [YOUR CODE HERE]
-  
+
+    err = clSetKernelArg(ocl->kernel, 0, sizeof(cl_mem), &input1);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with setting arguments", err)
+        exit(EXIT_FAILURE);
+    }
+    err = clSetKernelArg(ocl->kernel, 1, sizeof(cl_mem), &input2);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with setting arguments", err)
+        exit(EXIT_FAILURE);
+    }
+    err = clSetKernelArg(ocl->kernel, 2, sizeof(cl_mem), &output);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with setting arguments", err)
+        exit(EXIT_FAILURE);
+    }
+    err = clSetKernelArg(ocl->kernel, 3, sizeof(cl_mem), &status_buf);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with setting arguments", err)
+        exit(EXIT_FAILURE);
+    }
+    err = clSetKernelArg(ocl->kernel, 4, sizeof(cl_mem), &buffer_size);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with setting arguments", err)
+        exit(EXIT_FAILURE);
+    }
+
     // Execute the kernel, i.e. tell the device to process the data using the given global and local ranges
- 
-    [YOUR CODE HERE]
-  
-    // Wait for the command commands to get serviced before reading back results. This is the device sending an interrupt to the host    
-    
-    [YOUR CODE HERE]
+
+    err = clEnqueueNDRangeKernel(ocl->command_queue, ocl->kernel, 1, NULL, &global, &local, 0, NULL, NULL);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong", err)
+        exit(EXIT_FAILURE);
+    }
+
+    // Wait for the command commands to get serviced before reading back results. This is the device sending an interrupt to the host
+
+    clFinish(ocl->command_queue);
 
     // Check the status
 
-    [YOUR CODE HERE]
-  
+    err = clEnqueueReadBuffer(ocl->command_queue, status_buf, CL_TRUE, 0, sizeof(float), status, 0, NULL, NULL);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Something wrong with reading from buffer", err);
+        exit(EXIT_FAILURE);
+    }
+
     // When the status is 0, read back the results from the device to verify the output
-   
-    [YOUR CODE HERE]
-  
+
+    if (status == 0){ // TODO fix This
+        err = clEnqueueReadBuffer(ocl->command_queue, output, CL_TRUE, 0, sizeof(float) * buffer_size, output_buffer, 0, NULL, NULL);
+        if (err != CL_SUCCESS){
+            fprintf(stderr, "Something wrong with reading from buffer after reading 0 status", err);
+            exit(EXIT_FAILURE);
+    }
+
     // Shutdown and cleanup
-    
-    [YOUR CODE HERE]
-  
-// END of assignment code section 
-//===============================================================================================================================================================  
+
+    err = clReleaseMemObject(input1);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Error in release input1", err);
+        exit(EXIT_FAILURE);
+    }
+    err = clRealeaseMemObject(input2);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Error in release input2", err);
+        exit(EXIT_FAILURE);
+    }
+    err = clReleaseMemObject(output);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Error in release output", err);
+        exit(EXIT_FAILURE);
+    }
+    err = clReleaseMemObject(status_buf);
+    if (err != CL_SUCCESS){
+        fprintf(stderr, "Error in release status_buf", err);
+        exit(EXIT_FAILURE);
+    }
+
+// END of assignment code section
+//===============================================================================================================================================================
     return *status;
 
 }
